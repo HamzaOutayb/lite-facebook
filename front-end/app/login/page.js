@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link' // Import Link from next/link
-import './login.css'
+import styles from "./login.module.css"
+import { FetchApi } from '../helpers'
+import Link from 'next/link' 
 
 export default function Login () {
   const [email, setEmail] = useState('')
@@ -16,10 +17,9 @@ export default function Login () {
     e.preventDefault()
 
     try {
-      const response = await fetch('http://localhost:8080/api/login', {
+      const response = await FetchApi('/api/login', router,{
         method: 'POST',
-        body: JSON.stringify({ email, password }),
-        credentials:"include"
+        body: JSON.stringify({ email, password })
       })
 
       if (response.status == 200) {
@@ -36,15 +36,15 @@ export default function Login () {
   }
 
   return (
-    <div className="container">
-      <div className='form-box'>
-        <h2>Login</h2>
+    <div className={styles.container}>
+      <div className={styles.formBox}>
+        <h2 className={styles.heading}>Login</h2>
 
         {/* Error Popup */}
-        {error && <div className='error-popup'>{error}</div>}
+        {error && <div className={styles.errorPopup}>{error}</div>}
         <form onSubmit={handleSubmit}>
           {/* Email Input */}
-          <div className='input-group'>
+          <div className={styles.inputGroup}>
             <input
               type='text'
               value={email}
@@ -52,12 +52,12 @@ export default function Login () {
               required
               id='username'
               onChange={e => setEmail(e.target.value)}
-              className='input-field'
+              className={styles.inputField}
             />
           </div>
 
           {/* Password Input */}
-          <div className='input-group'>
+          <div className={styles.inputGroup}>
             <input
               type='password'
               value={password}
@@ -65,17 +65,16 @@ export default function Login () {
               required
               id='password'
               onChange={e => setPassword(e.target.value)}
-              className='input-field'
+              className={styles.inputField}
             />
           </div>
 
           {/* Submit Button */}
-          <button type='submit' className='submit-btn'>
+          <button type='submit' className={styles.submitBtn}>
             Login
           </button>
         </form>
 
-        {/* Redirect to Signup if no account */}
         <div className="signup-link">
           <p>Don't have an account? <Link href="/signup">Sign up here</Link></p>
         </div>

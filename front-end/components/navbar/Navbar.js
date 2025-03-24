@@ -8,8 +8,17 @@ import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNone
 import MailOutlinedIcon from '@mui/icons-material/MailOutlined'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-
-/*[
+import { GroupsOutlined } from '@mui/icons-material'
+import { usePathname, useRouter } from 'next/navigation'
+import { useWorker } from '@/app/_Context/WorkerContext'
+import { FetchApi } from '@/app/helpers'
+/*
+export default function Navbar () {
+  const [bool, setbool] = useState(false)
+  function handleclick () {
+    setbool(!bool)
+  }
+  const [notifications, setNotifications] = useState([
     {
       type: 'follow-request',
       invoker: 'hamza'
@@ -33,6 +42,7 @@ import Link from 'next/link'
 export default function Navbar () {
   const [bool, setbool] = useState(false)
   const [profile, setprofile] = useState(false)
+  const redirect = useRouter()
   function handleclick () {
     setbool(!bool)
   }
@@ -43,19 +53,22 @@ export default function Navbar () {
   const [notificationCount, setNotificationCount] = useState(0);
   const [Err, setError] = useState("")
    const [user, setUser] = useState({});
- 
+   
+  const router = usePathname();
+
      useEffect(() => {
-             const storedUser = JSON.parse(localStorage.getItem('user')) || {};
+           
+    
+      const storedUser = JSON.parse(localStorage.getItem('user')) || {};
              setUser(storedUser);
  
     const fetchNotifications = async () => {
       try {
-        const response = await fetch("http://localhost:8080/api/GetNotification/?page=1",{
+        const response = await FetchApi("/api/GetNotification/?page=1",redirect,{
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          credentials: 'include', 
         });
 
         if (response.status == 200) {
@@ -76,7 +89,7 @@ export default function Navbar () {
   }, []);
 
   return (
-    <nav>
+    <nav className={router == "/login" || router == "/signup" ? "disable" : ""}>
       {/* Search Bar (Right) */}
       <div className='logo'>
         <Link href={'/'}>
@@ -85,11 +98,17 @@ export default function Navbar () {
       </div>
 
       {/* Logo and Icons (Center) */}
-      <div className='nav-center'>
+      <div className='nav-center '>
         <div className='icons'>
-          <HomeOutlinedIcon />
-          <GroupOutlinedIcon />
-          
+        <Link href={"/"} className={`menu-item ${router == "/" && "active"}`}>
+                <span><HomeOutlinedIcon /></span>
+        </Link> 
+        <Link href={"/users"} className={`menu-item ${router == "/users" && "active"}`}>
+                <span><GroupOutlinedIcon /></span>
+            </Link>
+            <Link href={"/groups"} className={`menu-item ${router == "/groups" && "active"}`}>
+                <span><GroupsOutlined /></span>
+            </Link>
           <div className='notification'>
             <div onClick={handleclick}>
               <NotificationsNoneOutlinedIcon />
@@ -98,7 +117,14 @@ export default function Navbar () {
             <div className='pop-out'>{bool && <NotificationPop notifications={notifications} Err={Err} />}</div>
           
           </div>
-          <MailOutlinedIcon />
+
+          <Link href={"/chat"} className={`menu-item ${router == "/chat" && "active"}`} id="messages-notifications">
+                <span className='i notification'>
+                <MailOutlinedIcon />
+                    <span className="notification-count count" id='msgCount'></span>
+                </span>
+            </Link>
+          
         </div>
       </div>
       <div className='notification'>

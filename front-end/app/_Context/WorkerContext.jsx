@@ -1,41 +1,5 @@
-// // Context/WorkerContext.jsx
-// "use client";
-// import { createContext, useContext, useEffect, useRef, useState } from "react";
-
-// const WorkerContext = createContext();
-
-// export function WorkerProvider({ children }) {
-//     const workerRef = useRef(null);
-//     const portRef = useRef(null);
-//     const [clientWorker, setClientWorker] = useState(null);
-//     const [conversations, setConversations] = useState([]);
-
-//     useEffect(() => {
-//         workerRef.current = new SharedWorker("/sharedworker.js");
-//         portRef.current = workerRef.current.port;
-//         portRef.current.start();
-//         setClientWorker(workerRef.current);
-
-//         return () => {
-//             portRef.current.close();
-//             portRef.current = null;
-//         };
-//     }, []);
-
-//     return (
-//         <WorkerContext.Provider value={{ port: portRef.current , clientWorker, conversations, setConversations , portRef }}>
-//             {children}
-//         </WorkerContext.Provider>
-//     );
-// }
-
-// export const useWorker = () => useContext(WorkerContext);
-
-
-
-// Context/WorkerContext.jsx
 "use client";
-import { createContext, useContext, useEffect, useRef, useState  } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 const WorkerContext = createContext();
 
@@ -47,6 +11,7 @@ export function WorkerProvider({ children }) {
     const selectedConversationRef = useRef(null);
     const [messages, setMessages] = useState([]);
     const userRef = useRef(null);
+    const [notfications, setNotifications] = useState(0);
 
     useEffect(() => {
         const storedUser = localStorage.getItem("user");
@@ -62,28 +27,29 @@ export function WorkerProvider({ children }) {
         portRef.current.start();
         setClientWorker(worker);
 
-        ////////////
-
         const port = portRef.current;
         if (!port) return;
         const messageHandler = ({ data }) => {
             switch (data.type) {
                 case "conversations":
                     const onlineUsers = data.online_users;
-                    setConversations(
-                        data.conversations?.map((conv) => {
-                            if (conv.user_info) {
-                                return {
-                                    ...conv,
-                                    user_info: {
-                                        ...conv.user_info,
-                                        online: onlineUsers?.includes(conv.user_info.id),
-                                    },
-                                };
-                            }
-                            return conv;
-                        })
-                    );
+                    if (data.conversations && data.conversations.length > 0) {
+                        setConversations(
+                            data.conversations?.map((conv) => {
+                                if (conv.user_info) {
+                                    return {
+                                        ...conv,
+                                        user_info: {
+                                            ...conv.user_info,
+                                            online: onlineUsers?.includes(conv.user_info.id),
+                                        },
+                                    };
+                                }
+                                return conv;
+                            })
+                        );
+                    }
+
                     break;
 
                 case "online":
@@ -148,16 +114,6 @@ export function WorkerProvider({ children }) {
                                 },
                             });
                         }
-                        // const type = selectedConversationRef.current.type == "private" ? "read_messages_private" : "read_messages_group";
-                        // port.postMessage({
-                        //     kind: "send",
-                        //     payload: {
-                        //         type,
-                        //         message: {
-                        //             conversation_id: conversationId,
-                        //         },
-                        //     },
-                        // });
                     }
                     break;
 
@@ -168,15 +124,7 @@ export function WorkerProvider({ children }) {
 
 
         port.addEventListener("message", messageHandler);
-        port.postMessage({ kind: "connect" });
-        // console.log("port", port);
-
-        // return () => {
-        //     port.removeEventListener("message", messageHandler);
-        // };
-
-        ////////////
-
+        port.postMessage({ kind: "connect", payload: process.env.NEXT_PUBLIC_API_URL });
 
         return () => {
             port.removeEventListener("message", messageHandler);
@@ -186,9 +134,26 @@ export function WorkerProvider({ children }) {
         };
     }, []);
 
+    useEffect(() => {
+        const count = conversations?.reduce((acc, conv) => acc + conv.seen, 0);
+        setNotifications(count);
+        console.log(count)
+    }, [conversations])
+
+    const value = {
+        userRef,
+        portRef, clientWorker,
+        conversations,
+        setConversations,
+        selectedConversationRef,
+        messages,
+        setMessages,
+        notfications
+    }
+
     return (
         <WorkerContext.Provider
-            value={{ portRef, clientWorker, conversations, setConversations , selectedConversationRef , messages , setMessages }}
+            value={value}
         >
             {children}
         </WorkerContext.Provider>

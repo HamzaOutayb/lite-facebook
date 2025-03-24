@@ -8,22 +8,22 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"sync"
 
 	"social-network/internal/models"
+	"social-network/internal/service"
 	utils "social-network/pkg"
 
 	"github.com/gofrs/uuid/v5"
 	"github.com/gorilla/websocket"
 )
 
-var (
-	userConnections = make(map[int][]*websocket.Conn)
-	userConnMu      sync.RWMutex
+// var (
+// 	UserConnections = make(map[int][]*websocket.Conn)
+// 	UserConnMu      sync.RWMutex
 
-	convSubscribers = make(map[int][]int)
-	convSubMu       sync.RWMutex
-)
+// 	ConvSubscribers = make(map[int][]int)
+// 	ConvSubMu       sync.RWMutex
+// )
 
 // handle messages of ws
 func (h *Handler) MessagesHandler(upgrader websocket.Upgrader) http.HandlerFunc {
@@ -36,20 +36,18 @@ func (h *Handler) MessagesHandler(upgrader websocket.Upgrader) http.HandlerFunc 
 
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			fmt.Println("WebSocket upgrade error:", err)
 			return
 		}
 		defer conn.Close()
 
-		userConnMu.Lock()
-		userConnections[user.ID] = append(userConnections[user.ID], conn)
-		userConnMu.Unlock()
+		service.UserConnMu.Lock()
+		service.UserConnections[user.ID] = append(service.UserConnections[user.ID], conn)
+		service.UserConnMu.Unlock()
 
 		defer removeConnection(user.ID, conn)
 
 		conversations, err := h.Service.FetchConversations(user.ID)
 		if err != nil {
-			fmt.Println("Fetch conversations error:", err)
 			return
 		}
 
@@ -62,7 +60,6 @@ func (h *Handler) MessagesHandler(upgrader websocket.Upgrader) http.HandlerFunc 
 			OnlineUsers:   getOnlineUsers(conversations),
 		}
 		if err := conn.WriteJSON(initialMsg); err != nil {
-			fmt.Println("Initial message send error:", err)
 			return
 		}
 
@@ -73,24 +70,20 @@ func (h *Handler) MessagesHandler(upgrader websocket.Upgrader) http.HandlerFunc 
 			typeMessage, message, err := conn.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err) {
-					fmt.Printf("WebSocket closed: %v\n", err)
 				}
 				break
 			}
 
 			if typeMessage == websocket.BinaryMessage {
 				if len(message) < 4 {
-					fmt.Println("short")
 					continue
 				}
 				idLen := binary.LittleEndian.Uint32(message[0:4])
 				if len(message) < int(idLen)+4 {
-					fmt.Println("short dfdf")
 					continue
 				}
 				err = json.Unmarshal(message[4:4+idLen], &msg)
 				if err != nil {
-					fmt.Printf("error n json: %v\n", err)
 					break
 				}
 				path := HandleImage(msg.Type, message[4+idLen:])
@@ -100,7 +93,6 @@ func (h *Handler) MessagesHandler(upgrader websocket.Upgrader) http.HandlerFunc 
 			} else if typeMessage == websocket.TextMessage {
 				err = json.Unmarshal(message, &msg)
 				if err != nil {
-					fmt.Printf("error n json: %v\n", err)
 					break
 				}
 				msg.Message.Image = ""
@@ -115,50 +107,50 @@ func (h *Handler) MessagesHandler(upgrader websocket.Upgrader) http.HandlerFunc 
 
 // add user to conversations
 func addUserToConversations(userID int, conversations []models.ConversationsInfo) {
-	convSubMu.Lock()
-	defer convSubMu.Unlock()
+	service.ConvSubMu.Lock()
+	defer service.ConvSubMu.Unlock()
 
 	for _, conv := range conversations {
 		convID := conv.Conversation.ID
-		subscribers := convSubscribers[convID]
+		subscribers := service.ConvSubscribers[convID]
 
 		if !slices.Contains(subscribers, userID) {
-			convSubscribers[convID] = append(subscribers, userID)
+			service.ConvSubscribers[convID] = append(subscribers, userID)
 		}
 	}
 }
 
 // Remove connection from user's connections
 func removeConnection(userID int, conn *websocket.Conn) {
-	userConnMu.Lock()
-	defer userConnMu.Unlock()
+	service.UserConnMu.Lock()
+	defer service.UserConnMu.Unlock()
 
-	conns := userConnections[userID]
+	conns := service.UserConnections[userID]
 	for i, c := range conns {
 		if c == conn {
-			userConnections[userID] = slices.Delete(conns, i, i+1)
+			service.UserConnections[userID] = slices.Delete(conns, i, i+1)
 			break
 		}
 	}
 
-	if len(userConnections[userID]) == 0 {
-		delete(userConnections, userID)
+	if len(service.UserConnections[userID]) == 0 {
+		delete(service.UserConnections, userID)
 		cleanupConversationSubscriptions(userID)
 	}
 }
 
 // Remove user from conversations if last connection
 func cleanupConversationSubscriptions(userID int) {
-	convSubMu.Lock()
-	defer convSubMu.Unlock()
+	service.ConvSubMu.Lock()
+	defer service.ConvSubMu.Unlock()
 
-	for convID, subscribers := range convSubscribers {
+	for convID, subscribers := range service.ConvSubscribers {
 		if index := slices.Index(subscribers, userID); index != -1 {
 			Tabupdated := slices.Delete(subscribers, index, index+1)
 			if len(Tabupdated) == 0 {
-				delete(convSubscribers, convID)
+				delete(service.ConvSubscribers, convID)
 			} else {
-				convSubscribers[convID] = Tabupdated
+				service.ConvSubscribers[convID] = Tabupdated
 			}
 		}
 	}
@@ -176,14 +168,17 @@ func handleMessage(msg models.WSMessage, h *Handler, conn *websocket.Conn) {
 			}
 		}
 
-		convSubMu.RLock()
-		subscribers, ok := convSubscribers[msg.Message.ConversationID]
-		convSubMu.RUnlock()
+		service.ConvSubMu.RLock()
+		subscribers, ok := service.ConvSubscribers[msg.Message.ConversationID]
+		service.ConvSubMu.RUnlock()
+
+		
 
 		if !ok || !slices.Contains(subscribers, msg.Message.SenderID) {
 			sendError(msg.Message.SenderID, "Not authorized for this conversation")
 			return
 		}
+
 		var err error
 		if err = h.Service.CreateMessage(&msg); err != nil {
 			fmt.Println("Create message error:", err)
@@ -192,17 +187,16 @@ func handleMessage(msg models.WSMessage, h *Handler, conn *websocket.Conn) {
 		}
 
 		if msg.UserInfo, err = h.Service.GetUserByID(msg.Message.SenderID); err != nil {
-			fmt.Println("Get user error", err)
 			sendError(msg.Message.SenderID, "Failed to send message")
 			return
 		}
 
+		fmt.Println("subscribers", subscribers)
 		distributeMessage(msg, subscribers)
 	case "conversations":
 
 		conversations, err := h.Service.FetchConversations(msg.Message.SenderID)
 		if err != nil {
-			fmt.Println("Fetch conversations error:", err)
 			return
 		}
 
@@ -242,17 +236,16 @@ func notifyUserStatus(userID int, status string, conversations []models.Conversa
 	}
 	var err error
 	if msg.UserInfo, err = h.Service.GetUserByID(msg.Message.SenderID); err != nil {
-		fmt.Println("Get user error", err)
 		sendError(msg.Message.SenderID, "Failed to send message")
 		return
 	}
 
 	var allSubscribers []int
-	convSubMu.RLock()
+	service.ConvSubMu.RLock()
 	for _, conv := range conversations {
-		allSubscribers = append(allSubscribers, convSubscribers[conv.Conversation.ID]...)
+		allSubscribers = append(allSubscribers, service.ConvSubscribers[conv.Conversation.ID]...)
 	}
-	convSubMu.RUnlock()
+	service.ConvSubMu.RUnlock()
 
 	subscribers := uniqueInts(allSubscribers)
 	distributeMessage(msg, subscribers)
@@ -260,11 +253,11 @@ func notifyUserStatus(userID int, status string, conversations []models.Conversa
 
 // destribute message for all
 func distributeMessage(msg models.WSMessage, receivers []int) {
-	userConnMu.RLock()
-	defer userConnMu.RUnlock()
+	service.UserConnMu.RLock()
+	defer service.UserConnMu.RUnlock()
 
 	for _, userID := range receivers {
-		if conns, ok := userConnections[userID]; ok {
+		if conns, ok := service.UserConnections[userID]; ok {
 			for _, conn := range conns {
 				if err := conn.WriteJSON(msg); err != nil {
 					fmt.Println("Message distribution error:", err)
@@ -276,13 +269,13 @@ func distributeMessage(msg models.WSMessage, receivers []int) {
 
 // get online users
 func getOnlineUsers(conversations []models.ConversationsInfo) []int {
-	userConnMu.RLock()
-	defer userConnMu.RUnlock()
+	service.UserConnMu.RLock()
+	defer service.UserConnMu.RUnlock()
 
 	var online []int
 	for _, conv := range conversations {
 		if conv.Conversation.Type == "private" {
-			if _, ok := userConnections[conv.UserInfo.ID]; ok {
+			if _, ok := service.UserConnections[conv.UserInfo.ID]; ok {
 				online = append(online, conv.UserInfo.ID)
 			}
 		}
@@ -292,10 +285,10 @@ func getOnlineUsers(conversations []models.ConversationsInfo) []int {
 
 // for errors
 func sendError(userID int, message string) {
-	userConnMu.RLock()
-	defer userConnMu.RUnlock()
+	service.UserConnMu.RLock()
+	defer service.UserConnMu.RUnlock()
 
-	if conns, ok := userConnections[userID]; ok {
+	if conns, ok := service.UserConnections[userID]; ok {
 		errMsg := models.WSMessage{
 			Type:    "error",
 			Message: models.Message{Content: message},
@@ -343,7 +336,6 @@ func HandleImage(filename string, buffer []byte) string {
 	imageName, _ := uuid.NewV4()
 	err := os.WriteFile("../front-end/public/images/"+imageName.String()+extensions[extIndex], buffer, 0o644)
 	if err != nil {
-		fmt.Println(err)
 		return ""
 	}
 	return imageName.String() + extensions[extIndex]

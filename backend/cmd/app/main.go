@@ -13,7 +13,6 @@ import (
 func main() {
 	db, err := repository.OpenDb()
 	if err != nil {
-		fmt.Println("Error in opening of database:", err)
 		return
 	}
 
@@ -26,10 +25,10 @@ func main() {
 		Handler: middlewares.CORS(middlewares.AuthMiddleware(api.Routes(db), db)),
 	}
 
-	fmt.Println("http://localhost:8080/")
+	fmt.Println("/")
 	err = server.ListenAndServe()
 	if err != nil {
-		fmt.Println("Error in starting of server:", err)
+		log.Println("Error in starting of server:", err)
 		return
 	}
 }
